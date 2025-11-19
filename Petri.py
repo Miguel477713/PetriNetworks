@@ -59,6 +59,7 @@ class PetriNet:
             newMarking = self.startMarking.T + self.adjacencyMatrix @ firingTransitionVector.T
         else:
             print(f"Transition t{firingTransition + 1} is not available")
+            return None
 
         return newMarking
     
