@@ -1,6 +1,11 @@
 import os, numpy
 from typing import Optional
 
+# Apuntes branch: marker and a short note added.
+# This variable helps identify that this file was modified for the
+# 'apuntes' git branch. It's harmless and does not affect runtime.
+__branch__ = "apuntes"
+
 if os.name == 'nt':
     os.system('cls')  # Clear the console for Windows
 elif os.name == 'posix':
@@ -72,23 +77,38 @@ class PetriNet:
 
 
 def main() -> None:
-    pre = numpy.array([[1, 0, 0, 0, 0],
-                    [0, 1, 0, 0, 0],
-                    [0, 0, 1, 0, 0],
-                    [1, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0],
-                    [0, 0, 0, 0, 1],
-                    ])
+    # pre = numpy.array([[1, 0, 0, 0, 0],
+    #                 [0, 1, 0, 0, 0],
+    #                 [0, 0, 1, 0, 0],
+    #                 [1, 0, 0, 0, 0],
+    #                 [0, 0, 0, 1, 0],
+    #                 [0, 0, 0, 0, 1],
+    #                 ])
 
-    post = numpy.array([[0, 0, 1, 0, 0],
-                        [1, 0, 0, 0, 0],
-                        [0, 1, 0, 0, 0],
-                        [0, 0, 0, 0, 1],
-                        [1, 0, 0, 0, 0],
-                        [0, 0, 0, 1, 0],
-                    ])
+    pre = numpy.array([
+        [1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0],
+        [0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 1],
+    ])
 
-    currentMarking = startMarking = numpy.array([1, 0, 0, 1, 0, 0])
+    # post = numpy.array([[0, 0, 1, 0, 0],
+    #                     [1, 0, 0, 0, 0],
+    #                     [0, 1, 0, 0, 0],
+    #                     [0, 0, 0, 0, 1],
+    #                     [1, 0, 0, 0, 0],
+    #                     [0, 0, 0, 1, 0],
+    #                 ])
+    post = numpy.array([
+        [0, 0, 0, 0, 1],
+        [1, 0, 0, 1, 0],
+        [1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0],
+    ])
+    currentMarking = startMarking = numpy.array([1, 0, 0, 0, 0])
+
     net = PetriNet(pre=pre, post=post, startMarking=startMarking)
 
     petriNetworks = {} #empty dict
