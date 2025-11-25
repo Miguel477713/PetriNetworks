@@ -163,54 +163,84 @@ def build_reachability_graph(pre: numpy.ndarray, post: numpy.ndarray, start_mark
 
     return nodes, edges, depths
 
+
 def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_transitions: int):
     """
     Analyze Boundedness, Liveness, and Reversibility based on the generated graph.
+    References definitions from '11-Redes de Petri.pdf'.
     """
-    print("\nQualitative Analysis of the Petri Net:")
+    print("\n" + "=" * 60)
+    print("QUALITATIVE ANALYSIS (Based on course notes: 11-Redes de Petri)")
+    print("=" * 60)
+
     # Helper: format marking elements to Python ints or 'ω'
     def format_marking(m):
         return tuple('ω' if x is math.inf else int(x) for x in m)
 
-    #BOUNDEDNESS
+    # ---------------------------------------------------------
+    # 1. BOUNDEDNESS ANALYSIS
+    # ---------------------------------------------------------
+    # Theory: A place is k-bounded if tokens <= k. If the system is unbounded,
+    # the reachability graph is mapped to a coverability graph using ω (infinity).
     is_bounded = True
+    omega_node = None
+
     for m in nodes.keys():
         if math.inf in m:
             is_bounded = False
+            omega_node = format_marking(m)
             break
 
-    print(f"Boundedness: {'BOUNDED' if is_bounded else 'UNBOUNDED (ω appears)'}")
-    # Build adjacency list for graph traversal
-    adj = defaultdict(list) # using defaultdict for convenience since we may have sparse connections
-    for from_marking, to_marking, t_idx in edges:  # build adjacency list for liveness and reversibility checks
-        adj[from_marking].append((to_marking, t_idx))  # append (neighbor, transition_index)
-    # LIVENESS & DEADLOCKS
+    print(f"\n1. BOUNDEDNESS: {'BOUNDED' if is_bounded else 'UNBOUNDED'}")
+    if is_bounded:
+        print(f"   Reason: No place count exceeded a finite limit k.")
+        print(f"   The symbol ω (infinity) does not appear in the generated graph.")
+    else:
+        print(f"   Reason: UNBOUNDED because ω appears in marking {omega_node}.")
+        print(f"   Reference: 'If ω appears -> PN unbounded' (Slide 305).")
+
+    # Build adjacency list for graph traversal (needed for Liveness/Reversibility)
+    adj = defaultdict(list)
+    for from_marking, to_marking, t_idx in edges:
+        adj[from_marking].append((to_marking, t_idx))
+
+    # ---------------------------------------------------------
+    # 2. LIVENESS ANALYSIS
+    # ---------------------------------------------------------
+    # Theory:
+    # - Deadlock: A marking where NO transition is enabled.
+    # - Liveness: A transition t is live if from EVERY reachable marking,
+    #   there is a sequence to fire t.
+
     deadlock_nodes = []
     for node in nodes:
-        if not adj[node]:  # No outgoing edges
-            # store formatted marking with plain ints (or 'ω')
+        if not adj[node]:  # No outgoing edges means no transition is enabled
             deadlock_nodes.append(format_marking(node))
 
-    if deadlock_nodes:
-        print(f"Deadlock: DETECTED at markings: {deadlock_nodes}")
-        is_live = False  # If deadlock exists, it is not Live
-    else:
-        print("Deadlock: None (Deadlock-free)")
+    print(f"\n2. LIVENESS: ", end="")
 
-        # Check Strict Liveness:
-        # A PN is live if from EVERY node, EVERY transition must be reachable.
+    if deadlock_nodes:
+        print("NOT LIVE (Deadlock Detected)")
+        print(f"   Reason: The system contains deadlocks at marking(s): {deadlock_nodes}.")
+        print(f"   Reference: 'Deadlocks: for a given marking, any transition cannot be fired' (Slide 260).")
+        is_live = False
+    else:
+        # Check Strict Liveness (Slide 263-264)
         all_trans_live = True
+        failed_trans = -1
+        failed_node = None
+
         for t_idx in range(1, num_transitions + 1):
             # Check if transition t_idx is reachable from EVERY node
             for start_node in nodes:
-                # BFS to find t_idx
+                # BFS to find if t_idx can ever be fired starting from start_node
                 queue = [start_node]
                 visited = {start_node}
                 found_t = False
-                while queue: # while there are nodes to explore
-                    curr = queue.pop(0) # dequeue the first node
-                    for neighbor, edge_t in adj[curr]: # for each neighbor and the transition that leads to it
-                        if edge_t == t_idx: # if this edge corresponds to the transition we are looking for
+                while queue:
+                    curr = queue.pop(0)
+                    for neighbor, edge_t in adj[curr]:
+                        if edge_t == t_idx:
                             found_t = True
                             break
                         if neighbor not in visited:
@@ -219,46 +249,67 @@ def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_trans
                     if found_t:
                         break
 
-                if not found_t: # transition t_idx is not reachable from start_node
-                    all_trans_live = False # this transition is not live
-                    break # no need to check further for this transition
+                if not found_t:
+                    all_trans_live = False
+                    failed_trans = t_idx
+                    failed_node = format_marking(start_node)
+                    break
             if not all_trans_live:
                 break
-        is_live = all_trans_live # if all transitions are live
 
-    print(f"Liveness: {'LIVE' if is_live else 'NOT LIVE'}")
+        if all_trans_live: # If we have every transition live:
+            print("LIVE")
+            print("   Reason: The net is Deadlock-free AND every transition is live.")
+            print("   (Every transition is reachable from every reachable marking).")
+            print("   Reference: 'A PN is live... iff t is live for all t' (pp.6/9).")
+        else:
+            print("NOT LIVE (Partial Functioning)")
+            print(f"   Reason: Transition t{failed_trans} is not live.")
+            print(f"   Once the system reaches {failed_node}, t{failed_trans} can never fire again.")
+            is_live = False
 
-    #REVERSIBILITY
-    # A PN is reversible if and only if for all M in R(M0), M0 in R(M)
-    # this means: Can we get back to start_marking from EVERY reachable node?
+    #REVERSIBILITY ANALYSIS
+
+    # Theory: A PN is reversible if M0 is reachable from ALL reachable markings.
+    # (The graph is strongly connected).
+
     is_reversible = True
+    irreversible_node = None
 
     for node in nodes:
         if node == start_marking:
             continue
 
-        # BFS to find start_marking
+        # BFS to try and get back to start_marking
         queue = [node]
         visited = {node}
         found_start = False
 
         while queue:
             curr = queue.pop(0)
-            if curr == start_marking:# found a path back to start_marking
+            if curr == start_marking:
                 found_start = True
-                break # no need to explore further
+                break
 
-            for neighbor, _ in adj[curr]: # for each neighbor (ignore transition index)
+            for neighbor, _ in adj[curr]:
                 if neighbor not in visited:
-                    visited.add(neighbor) # mark as visited
-                    queue.append(neighbor) # enqueue neighbor
+                    visited.add(neighbor)
+                    queue.append(neighbor)
 
-        if not found_start: # could not find path back to start_marking
-            is_reversible = False # not reversible
-            break # no need to check further
+        if not found_start:
+            is_reversible = False
+            irreversible_node = format_marking(node)
+            break
 
-    print(f"Reversibility: {'REVERSIBLE' if is_reversible else 'NOT REVERSIBLE'}")
-    print("-"*20)
+    print(f"\n3. REVERSIBILITY: {'REVERSIBLE' if is_reversible else 'NOT REVERSIBLE'}")
+    if is_reversible:
+        print(f"   Reason: It is possible to return to the initial marking M_0 from ALL reachable states.")
+        print(f"   Reference: 'A PN is reversible... iff for all M, M_0 is in R(NS, M)' (Slide 7/9).")
+    else:
+        print(f"   Reason: It is NOT possible to return to M0 from marking {irreversible_node}.")
+        print(
+            f"   Reference: 'Related with the existence of sequences leading the PN to the initial marking' (Slide 285).")
+    print("=" * 60 + "\n")
 def draw_reachability_graph(nodes_map, edges, depths, filename='reachability_graph'):
     """
     Draw the reachability graph using graphviz. Shows ω for unbounded places.
@@ -298,7 +349,7 @@ def draw_reachability_graph(nodes_map, edges, depths, filename='reachability_gra
         if from_key in node_ids and to_key in node_ids:
             # use proper Graphviz edge label so transitions appear as t1..tn
             dot.edge(node_ids[from_key], node_ids[to_key], label=f't{tindex}')
-    # output_path = dot.render(filename, cleanup=True)
+    output_path = dot.render(filename, cleanup=True)
 
 def main() -> None:
     # APUNTES UANL pp. 65
