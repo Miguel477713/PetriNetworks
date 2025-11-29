@@ -164,6 +164,51 @@ def build_reachability_graph(pre: numpy.ndarray, post: numpy.ndarray, start_mark
     return nodes, edges, depths
 
 
+# Tarjan's algorithm to find strongly connected components
+def tarjan_scc(adj_map: dict):
+    """Return list of SCCs where each SCC is a list of nodes (node keys).
+    adj_map: dict[node] -> list of neighbor nodes
+    """
+    index = {}
+    lowlink = {}
+    onstack = set()
+    stack = []
+    sccs = []
+    next_index = 0
+
+    def strongconnect(v):
+        nonlocal next_index
+        index[v] = next_index
+        lowlink[v] = next_index
+        next_index += 1
+        stack.append(v)
+        onstack.add(v)
+
+        for w in adj_map.get(v, []):
+            if w not in index:
+                strongconnect(w)
+                lowlink[v] = min(lowlink[v], lowlink[w])
+            elif w in onstack:
+                lowlink[v] = min(lowlink[v], index[w])
+
+        # If v is a root node, pop the stack and generate an SCC
+        if lowlink[v] == index[v]:
+            scc = []
+            while True:
+                w = stack.pop()
+                onstack.remove(w)
+                scc.append(w)
+                if w == v:
+                    break
+            sccs.append(scc)
+
+    for v in adj_map.keys():
+        if v not in index:
+            strongconnect(v)
+
+    return sccs
+
+
 def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_transitions: int):
     """
     Analyze Boundedness, Liveness, and Reversibility based on the generated graph.
@@ -180,8 +225,6 @@ def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_trans
     # ---------------------------------------------------------
     # 1. BOUNDEDNESS ANALYSIS
     # ---------------------------------------------------------
-    # Theory: A place is k-bounded if tokens <= k. If the system is unbounded,
-    # the reachability graph is mapped to a coverability graph using ω (infinity).
     is_bounded = True
     omega_node = None
 
@@ -204,14 +247,24 @@ def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_trans
     for from_marking, to_marking, t_idx in edges:
         adj[from_marking].append((to_marking, t_idx))
 
+    # Also build a neighbor-only map for SCC computation
+    neighbor_map = {n: [nbr for nbr, _ in adj[n]] for n in adj}
+    # ensure isolated nodes are present
+    for n in nodes:
+        neighbor_map.setdefault(n, [])
+
+    # ---------------------------------------------------------
+    # 1.5 STRONGLY CONNECTED COMPONENTS (Tarjan)
+    # ---------------------------------------------------------
+    sccs = tarjan_scc(neighbor_map)
+    print(f"\n1.5 STRONGLY CONNECTED COMPONENTS (Tarjan) - total: {len(sccs)}")
+    for i, scc in enumerate(sccs, start=1):
+        formatted = [format_marking(x) for x in scc]
+        print(f"   SCC {i}: {formatted}")
+
     # ---------------------------------------------------------
     # 2. LIVENESS ANALYSIS
     # ---------------------------------------------------------
-    # Theory:
-    # - Deadlock: A marking where NO transition is enabled.
-    # - Liveness: A transition t is live if from EVERY reachable marking,
-    #   there is a sequence to fire t.
-
     deadlock_nodes = []
     for node in nodes:
         if not adj[node]:  # No outgoing edges means no transition is enabled
@@ -269,9 +322,6 @@ def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_trans
             is_live = False
 
     #REVERSIBILITY ANALYSIS
-
-    # Theory: A PN is reversible if M0 is reachable from ALL reachable markings.
-    # (The graph is strongly connected).
 
     is_reversible = True
     irreversible_node = None
@@ -431,6 +481,25 @@ def main() -> None:
     #     [0, 0, 1]
     # ])
     # startMarking = numpy.array([1, 0, 0, 0])
+
+    # Ejemplo pagina 66 libro UANL
+    pre = numpy.array([
+        [1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0],
+        [1, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 1]
+    ])
+    post = numpy.array([
+        [0, 0, 1, 0, 0],
+        [1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0]
+    ])
+    startMarking = numpy.array([1, 0, 0, 1, 0, 0])
     # Generate and display the full reachability graph first
     print("Generating reachability graph...")
     nodes, edges, depths = build_reachability_graph(pre, post, startMarking)

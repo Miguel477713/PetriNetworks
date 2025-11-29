@@ -1,88 +1,115 @@
+## Una RP es viva ssi en el grafo de cobertura, todas las componentes fuertemente conexas contienen todas las transiciones.
+
 # Petri Net Reachability Information
 
-This project implements a Petri Net analyzer using the **Karp-Miller algorithm**, which generates a reachability graph and performs qualitative analysis for Boundedness, Liveness, and Reversibility.
+This project implements a Petri Net analyzer using the **Karp-Miller algorithm**, which generates a reachability (coverability) graph and performs qualitative analysis for Boundedness, Liveness, Reversibility, and computes Strongly Connected Components (SCCs) using Tarjan's algorithm.
+
+---
+
+## What's new (changelog)
+
+- Added Tarjan's algorithm to compute Strongly Connected Components (SCCs) in the reachability/coverability graph.
+- The script `Petri_m.py` now prints SCCs found and includes a clearer, refactored analysis flow.
+- Graph drawing with Graphviz remains available (output PNG) and nodes containing ω are rendered as 'ω'.
 
 ---
 
 ## Generalities of the Karp-Miller Algorithm
 
-The **Karp-Miller algorithm** constructs the **Coverability Graph** for a Petri Net. Its core purpose is to transform a potentially infinite state space (found in nets that can accumulate tokens endlessly) into a finite, analyzable graph representation by introducing the **omega ($\omega$) symbol**.
-Reference: Understanding Petri Nets by Wolfgang Reisig,2013, chapter 14
+The **Karp-Miller algorithm** constructs the **Coverability Graph** for a Petri Net. Its core purpose is to transform a potentially infinite state space (found in nets that can accumulate tokens endlessly) into a finite, analyzable graph representation by introducing the **omega (ω) symbol**.
 
-The algorithm operates as a **Breadth-First Search (BFS)** across the markings. It systematically explores all reachable states by firing every enabled transition from a given state. The process halts when all possible transitions have been fired, and no new, unique markings (including those containing $\omega$) can be generated.
+The algorithm operates as a **Breadth-First Search (BFS)** across the markings. It systematically explores all reachable states by firing every enabled transition from a given state. The process halts when all possible transitions have been fired, and no new, unique markings (including those containing ω) can be generated.
 
-### The $\omega$ Abstraction Rule
+### The ω Abstraction Rule
 
-This rule ensures the process ends by identifying growing components. 
+This rule ensures the process ends by identifying growing components.
 
-* When a new state is generated, it is compared against **all ancestors** on the path from the starting state.
-* If the new state is found to be greater than or equal to an ancestor in all token positions, and **strictly greater in at least one position**, the rule is triggered.
-* The positions showing strict growth are replaced by $\omega$, which signifies the place is **unbounded** and can accumulate an arbitrarily large number of tokens.
+- When a new state is generated, it is compared against **all ancestors** on the path from the starting state.
+- If the new state is found to be greater than or equal to an ancestor in all token positions, and **strictly greater in at least one position**, the rule is triggered.
+- The positions showing strict growth are replaced by ω, which signifies the place is **unbounded** (can accumulate an arbitrarily large number of tokens).
 
 ---
 
-## Reachability & Coverability Details
+## Reachability & Coverability Details (example)
 
 ### Initialization
-The algorithm begins at the initial state.
-* **Example:** `[1, 0, 0, 1, 0, 0]`
+The algorithm begins at the initial state. Example: `[1, 0, 0, 1, 0, 0]`.
 
-### The Enabling Check
+### Enabling check
 A transition is allowed to fire if and only if the current state has enough tokens for every input required by that transition.
 
-**Example at State `[1, 0, 0, 1, 0, 0]`:**
-* **Transition $t_1$ (Requires 1 from position $p_1$, 1 from $p_4$):**
-    * $M(p_1) \ge 1$ and $M(p_4) \ge 1$.
-    * **Result:** Enabled.
-* **Transition $t_2$ (Requires 1 from position $p_2$):**
-    * $M(p_2) = 0$, which is not $\ge 1$.
-    * **Result:** Disabled.
-
 ### Firing and State Evolution
-If a transition is enabled, the tokens are removed from the input places and added to the output places, generating the next state.
-* **Action:** Fire $t_1$.
-* **Result:** `[0, 1, 0, 0, 1, 0]`
+If a transition is enabled, tokens are removed from input places and added to output places, generating the next state.
 
-### Numerical Example (The $\omega$ Rule)
-The $\omega$ appears when the system finds a recurring growth pattern relative to an older state (a "Grandparent" scenario).
-
-1.  **Ancestor (Root):** `[1, 0, 0, 0]`
-2.  **New Raw Calculation:** If firing transitions leads to a state that would be `[1, 0, 0, 1]`.
-3.  **Comparison:** `[1, 0, 0, 1]` is greater than or equal to the Root `[1, 0, 0, 0]` in all positions, and strictly greater in the last position ($1 > 0$).
-4.  **Final Node:** The algorithm replaces the growing value: `[1, 0, 0, ω]`.
+### The ω Rule Example
+The ω appears when the system finds a recurring growth pattern relative to an older state (a "Grandparent" scenario). See the code comments and the Karp-Miller description above.
 
 ---
 
-## Qualitative Analysis
+## Qualitative Analysis Performed by `Petri_m.py`
 
-Properties are deduced directly from the structure of the generated graph using the following logic:
+The script prints the following information after generating the reachability / coverability graph:
 
-* **$\omega$ appears $\rightarrow$ The net is unbounded**
-* **The graph is strongly connected $\rightarrow$ The net is reversible**
-* **Every strongly connected component contains all the transitions $\rightarrow$ The net is live**
-* **Exists a terminal node $\rightarrow$ Deadlock**
+1. BOUNDEDNESS: Whether the net is BOUNDED or UNBOUNDED (ω presence means UNBOUNDED).
+2. STRONGLY CONNECTED COMPONENTS (SCCs) computed with Tarjan's algorithm. Each SCC is listed as a set of markings (ω rendered as 'ω').
+3. LIVENESS: Reports deadlocks and attempts to determine strict liveness (whether every transition is live from every marking).
+4. REVERSIBILITY: Whether the initial marking M0 is reachable from every reachable marking (graph strongly connected to M0).
 
-### Boundedness
-* **Definition:** A net is bounded if the number of tokens in every place never exceeds a fixed, finite number.
-* **Analysis:** If the symbol $\omega$ appears in any state, the net is declared **Unbounded**.
+### SCCs (Tarjan)
 
-### Strongly Connected Components (SCC) and Reversibility
-
-* **What is an SCC?**
-    An **SCC** is a subset of states in a directed graph where **every state is reachable from every other state** within that subset. This represents a perfect, closed loop.
-
-* **Analysis Logic for Reversibility:**
-    A net is **Reversible** if the initial state ($M_0$) is reachable from every other state. This requires the **entire reachability graph** to form a **single Strongly Connected Component**.
-
-### Liveness
-Liveness is a stronger property related to the permanent capability of transitions.
-
-* **1. Deadlock (No Liveness)**
-    * **Definition:** A state where **no** transitions are enabled (a "terminal node" in the graph).
-
-* **2. Strict Liveness**
-    * **Definition:** The net is strictly Live if it is always possible to eventually fire **any** transition in the net, no matter what state the system is in.
-    * **The Livelock Problem:** A net can be deadlock-free but still Not Live if it enters a **Livelock** scenario (a cycle where some transitions are permanently excluded).
-    * **Detection:** The code verifies that **"Every strongly connected component contains all the transitions."** This ensures that any closed loop the system settles into still permits all defined functions.
+- SCCs are useful to reason about recurrent behavior, livelocks, and closed sets of reachable states.
+- The new output prints all SCCs found and their members (markings). This helps locate cycles or closed components where certain transitions may never fire.
 
 ---
+
+## How to run
+
+1. Install dependencies (Graphviz required and Python packages):
+
+```powershell
+pip install -r requirements.txt
+```
+
+2. Run the script from the project root:
+
+```powershell
+python Petri_m.py
+```
+
+3. The program prints the reachability analysis and asks for a filename to render the graph as PNG.
+
+---
+
+## Common questions / Troubleshooting
+
+- Q: The PNG is not being generated, why?
+  - A: Make sure `graphviz` (the system package) is installed and `dot` is on your PATH. The Python `graphviz` package is only a wrapper: you still need the Graphviz binaries. On Windows, add Graphviz `bin` directory to PATH and reopen the terminal/IDE.
+
+- Q: I see `np.int64` in outputs (like deadlock nodes), how to avoid it?
+  - A: The code was refactored to convert numeric marking elements to plain Python `int` for printing and to render ω as a string. This prevents `np.int64(...)` in printed output.
+
+- Q: Why are there no transitions labeled `t3` or others in the generated graph PNG?
+  - A: The script only draws edges for transitions that are actually fired between markings while building the graph. If a transition is never enabled in any reachable marking (or its edges were filtered), it won't appear in the diagram. Check the printed list of edges or analyze the available transitions at specific markings.
+
+- Q: How to check why a line was commented out in Git?
+  - A: Use `git blame <file>` or inspect the history with `git log -p -- <file>` to see when and why changes were made. (Run these commands in your shell/IDE.)
+
+---
+
+## Suggested small next steps (if you want me to continue)
+
+- Add unit tests for the Karp-Miller and Tarjan parts (simple nets to validate SCC counts and ω appearance).
+- Make the graph drawing optional (CLI flag) and write the output path to the console.
+- Add more descriptive node labels (index + marking) so the PNG is easier to cross-reference with printed SCCs.
+
+---
+
+## References
+
+- Notes and slides from your course (referenced in code comments).
+- Reisig, W. (2013). Understanding Petri Nets.
+
+
+---
+
+(End of README)
