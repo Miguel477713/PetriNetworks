@@ -293,8 +293,8 @@ def analyze_properties(nodes: dict, edges: list, start_marking: tuple, num_trans
         else:
             print("NOT LIVE (Partial Functioning)")
             print(f"   Reason: Transition t{failed_trans} is not live according to the terminal strongly connected components.")
-            print("   Explanation:")
-            print("         Once the reachability graph enters terminal SCC {failed_component_index_for_display},")
+            print(f"   Explanation:")
+            print(f"       Once the reachability graph enters terminal SCC {failed_component_index_for_display},")
             print(f"       transition t{failed_trans} can never fire again from any marking in that region.")
             is_live = False
 
